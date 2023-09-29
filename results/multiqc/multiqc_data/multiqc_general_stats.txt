@@ -1,0 +1,7 @@
+Sample	Cell Ranger Count_mqc-generalstats-cell_ranger_count-Count_estimated_cells	Cell Ranger Count_mqc-generalstats-cell_ranger_count-Count_reads_in_cells	Cell Ranger Count_mqc-generalstats-cell_ranger_count-Count_avg_reads_cell	Cell Ranger Count_mqc-generalstats-cell_ranger_count-count_genstats_reads	Cell Ranger Count_mqc-generalstats-cell_ranger_count-Count_valid_bc	Cell Ranger Count_mqc-generalstats-cell_ranger_count-Count_Q30_bc	Cell Ranger Count_mqc-generalstats-cell_ranger_count-Count_Q30_read	Cell Ranger Count_mqc-generalstats-cell_ranger_count-Count_Q30_UMI	FastQC_mqc-generalstats-fastqc-percent_duplicates	FastQC_mqc-generalstats-fastqc-percent_gc	FastQC_mqc-generalstats-fastqc-avg_sequence_length	FastQC_mqc-generalstats-fastqc-median_sequence_length	FastQC_mqc-generalstats-fastqc-percent_fails	FastQC_mqc-generalstats-fastqc-total_sequences
+GC1	5639.0	96.3	72483.0	408730285.0	97.7	98.6	83.9	98.6						
+GC1_1									82.64346988540483	48.0	26.0	26	9.090909090909092	408730285.0
+GC1_2									77.38180217660785	46.0	98.0	98	9.090909090909092	408730285.0
+GC2	4112.0	94.7	82622.0	339739927.0	97.4	93.4	90.2	93.0						
+GC2_1									71.21854131900409	48.0	26.0	26	9.090909090909092	339739927.0
+GC2_2									60.91664510779429	46.0	91.0	91	9.090909090909092	339739927.0

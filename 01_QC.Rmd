@@ -1,0 +1,422 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+# Germinal Center B cell analysis
+
+## Environment setup
+
+### Dependencies installation
+skip if already available
+
+```{r dependencies_install, echo=F , warning=F, message=F }
+
+install.packages("tidyverse")
+install.packages("BiocManager")
+install.packages("Seurat")
+
+BiocManager::install("clusterProfiler")
+```
+
+### Load the dependecies
+```{r dependencies_load}
+library("tidyverse")
+library("Seurat")
+library("ggplot2")
+library("gridExtra")
+library(msigdbr)
+library(clusterProfiler)
+```
+
+## Load the Data
+Data downloaded from https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE139891 ( GSE139891_RAW.tar )
+The matrix for GC1 and GC2 are named GSM4148370_GC1_umi_grch38.txt.gz andGSM4148371_GC2_umi_grch38.txt.gz
+The row names are given as "{ENSEMBLID};{GENE_NAME}", let's keep only the gene name merging the counts of the ones having the same name
+
+```{r data_load}
+raw_counts = list(GC1= read.table(gzfile("./data/GSM4148370_GC1_umi_grch38.txt.gz"), sep="\t", header = T), GC2= read.table(gzfile("./data/GSM4148371_GC2_umi_grch38.txt.gz"), sep="\t", header = T))
+for ( exp in names(raw_counts)){
+  colnames(raw_counts[[exp]])[1] = "Gene"
+  raw_counts[[exp]][,1] = gsub("^.*;", "", raw_counts[[exp]][,1])
+  tmp_dup = raw_counts[[exp]] %>% group_by(Gene) %>% filter(n() >1) %>% summarise(across(where(is.numeric), sum))
+  tmp_uniq = raw_counts[[exp]] %>% group_by(Gene) %>% filter(n() == 1)
+  raw_counts[[exp]] = as.data.frame(rbind(tmp_uniq, tmp_dup))
+  rownames(raw_counts[[exp]]) = raw_counts[[exp]][,1]
+  raw_counts[[exp]] = raw_counts[[exp]][,-1]
+}
+sobj = list( GC1 = CreateSeuratObject(counts = raw_counts$GC1, project = "GC1", min.cells = 3, min.features = 1), 
+             GC2 = CreateSeuratObject(counts = raw_counts$GC2, project = "GC2", min.cells = 3, min.features = 1))
+
+```
+
+## Mitochondrial content
+
+```{r mitocondrial_count}
+mdata = NULL
+for ( exp in names(sobj) ){
+  sobj[[exp]][["percent.mt"]] <- PercentageFeatureSet(sobj[[exp]], pattern = "^MT-")
+  mdata = rbind(mdata,sobj[[exp]]@meta.data)
+}
+
+```
+
+## Quality check
+Plotted as well the recomended thresholds given by Seurat
+### Number of unique features
+```{r n_unique_features}
+p1= ggplot(mdata, aes(x=orig.ident, y=nFeature_RNA)) + geom_violin(aes(fill=orig.ident)) + 
+  geom_point(aes(x=orig.ident, y= nFeature_RNA), position = position_jitter(width = 0.3, height = 0), size=0.2) + ggtitle("Number of unique features") + theme_bw() 
+p1_thr= p1+ geom_hline(yintercept = 200, color="red") + geom_hline(yintercept = 2500, color="red")
+p1_thr
+
+```
+### Total number of count
+
+```{r total_n_of_counts}
+
+p2= ggplot(mdata, aes(x=orig.ident, y=nCount_RNA)) + geom_violin(aes( fill=orig.ident)) + 
+  geom_point( position = position_jitter(width = 0.3, height = 0), size=0.2) + 
+   ggtitle("Total count") + theme_bw()
+p2
+
+```
+
+### Percent of mitocondrial
+
+```{r mito_plot}
+head(mdata)
+p3= ggplot(mdata, aes(x=orig.ident, y=percent.mt)) + geom_violin(aes( fill=orig.ident)) + 
+  geom_point( position = position_jitter(width = 0.3, height = 0), size=0.2) + geom_hline(yintercept = 5, color="red")+
+   ggtitle("Percentage of mitocondrial counts") + theme_bw()
+p3
+```
+
+
+### nCounts vs nFeatures
+```{r ncount_nfeat}
+p4 =  ggplot(mdata, aes(x=nCount_RNA, y=nFeature_RNA)) + geom_point(aes( color=orig.ident), size=0.2)+
+   ggtitle(paste0("Pearson Correlation: \nGC1: ", round(cor(mdata$nCount_RNA[mdata$orig.ident == "GC1"],mdata$nFeature_RNA[mdata$orig.ident == "GC1"],  method="pearson") , 3), 
+                  "\nGC2: ",  round(cor(mdata$nCount_RNA[mdata$orig.ident == "GC2"],mdata$nFeature_RNA[mdata$orig.ident == "GC2"],  method="pearson") , 3) )) +
+  theme_bw() + facet_grid(cols = vars(orig.ident))
+p4
+```
+
+### nCounts vs mtPerc
+```{r ncount_mtperc}
+p5 =  ggplot(mdata, aes(x=nCount_RNA, y=percent.mt)) + geom_point(aes( color=orig.ident), size=0.2)+
+   ggtitle(paste0("Pearson Correlation: \nGC1: ", round(cor(mdata$nCount_RNA[mdata$orig.ident == "GC1"],mdata$percent.mt[mdata$orig.ident == "GC1"],  method="pearson") , 3), 
+                  "\nGC2: ",  round(cor(mdata$nCount_RNA[mdata$orig.ident == "GC2"],mdata$percent.mt[mdata$orig.ident == "GC2"],  method="pearson") , 3) )) +
+  theme_bw() + facet_grid(cols = vars(orig.ident))
+p5
+```
+
+
+
+### Save the plots
+```{r}
+dir.create("./plots/", showWarnings = F)
+pdf("./plots/QC.pdf")
+print(p1_thr)
+print(p2)
+print(p3)
+print(p4)
+print(p5)
+dev.off()
+```
+
+
+## Data Filtering
+There is no cell with less than 200 and 2500 is too stringent for the number of unique features. 
+Let's use the interquartile with k=3
+
+```{r data_filter}
+GCcolors = list(GC1="red", GC2="blue")
+k=3
+p1_thr2 = p1
+thresholds = list()
+for (exp in names(sobj)){
+  quants=quantile(sobj[[exp]]$nFeature_RNA)
+  thr_low = as.numeric(quants[2] - k*(quants[4] - quants[2]))
+  thr_high = as.numeric(quants[4] + k*(quants[4] - quants[2]))
+  thresholds[[exp]] = c(thr_low, thr_high)
+  if ( thr_low < 0 ){
+    thr_low = 0
+  }
+  thresholds[[exp]] = c(thr_low, thr_high)
+  p1_thr2 = p1_thr2 + geom_hline(yintercept = thr_low, color=GCcolors[[exp]], linetype=2) +  geom_hline(yintercept = thr_high, color=GCcolors[[exp]], linetype=2)
+}
+p1_thr2
+pdf("./plots/Filter.pdf")
+print(p1_thr2)
+dev.off()
+for (exp in names(sobj)){
+  sobj[[exp]] = subset(sobj[[exp]], subset =  nFeature_RNA > thresholds[[exp]][1]  & nFeature_RNA < thresholds[[exp]][2] & percent.mt < 5)
+}
+
+```
+
+## Normalization and variable features
+Normalize the data and find the variable features first
+```{r normalization}
+sobj <- lapply(X = sobj, FUN = function(x) {
+    x <- NormalizeData(x,  normalization.method = "LogNormalize", scale.factor = 10000)
+    x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 2000)
+})
+vf_plots = list()
+for (exp in names(sobj)){
+  top_n = head(VariableFeatures(sobj[[exp]]),n=15)
+  vf_plots[[exp]] = LabelPoints(plot= VariableFeaturePlot(sobj[[exp]]), points = top_n, repel=T)
+}
+print(vf_plots$GC1 + vf_plots$GC2) 
+pdf("./plots/VariableFeatures.pdf")
+for (exp in names(sobj)){
+  print(vf_plots[[exp]])
+}
+dev.off()
+
+```
+
+## Individual evaluation
+evaluate individually the two datasets before integrating
+
+```{r}
+sobj.individual = sobj
+for ( exp in names(sobj.individual)){
+  sobj.individual[[exp]] = ScaleData(sobj.individual[[exp]], verbose=F)
+  sobj.individual[[exp]] = RunPCA(sobj.individual[[exp]], npcs=30, verbose=F) 
+}
+dir.create("./plots/individual/", showWarnings = F)
+
+pdf("./plots/individual/ElbowPlot.pdf")
+ElbowPlot(sobj.individual$GC1, ndims = 30)+ggtitle("GC1")
+ElbowPlot(sobj.individual$GC2, ndims = 30)+ggtitle("GC2")
+dev.off()
+
+n_dim=10
+for ( exp in names(sobj.individual)){
+  sobj.individual[[exp]] = RunUMAP(sobj.individual[[exp]], reduction = "pca", dims = 1:n_dim)
+  sobj.individual[[exp]] = FindNeighbors(sobj.individual[[exp]], reduction = "pca", dims = 1:n_dim)
+  sobj.individual[[exp]] = FindClusters(sobj.individual[[exp]], resolution = 0.5)
+}
+pdf("./plots/individual/UMAP.pdf")
+print(DimPlot(sobj.individual$GC1, reduction = "umap", label = TRUE)+ggtitle("GC1"))
+print(DimPlot(sobj.individual$GC2, reduction = "umap", label = TRUE)+ggtitle("GC2"))
+dev.off()
+individual.markers = list()
+for ( exp in names(sobj.individual)){
+  individual.markers[[exp]]=FindAllMarkers(sobj.individual[[exp]], only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+}
+top.markers= list()
+top.10.markers= list()
+for ( exp in names(sobj.individual)){
+  top.markers[[exp]]= individual.markers[[exp]] %>% group_by(cluster) %>% top_n(n = 1, wt = avg_log2FC) %>% mutate(origin = exp)
+  top.10.markers[[exp]]= individual.markers[[exp]] %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC) %>% mutate(origin = exp)
+}
+merged.markers = merge(top.10.markers$GC1[,c("gene", "cluster")],top.10.markers$GC2[,c("gene", "cluster")], by = c("gene"), suffixes = c(".GC1", ".GC2") , all = T)
+
+known_markers = list(DZ= c("CXCR4", "AICDA"),
+LZ = c("CD83", "BCL2A1"),
+PBL = c("PRDM1","IRF4"),
+PreM = c("CCR6", "CCR6"),
+s_g2_m = c("PCNA", "MKI67", "CDK1", "CDC20"))
+
+km="DZ"
+
+pdf("./plots/individual/known_markers.pdf")
+for ( km in names(known_markers)){
+  for ( exp in names(sobj.individual)){
+    sobj.individual[[exp]]@meta.data[,km]= colMeans(sobj.individual[[exp]]@assays$RNA@data[known_markers[[km]],], na.rm = T)
+  }
+  print(FeaturePlot(sobj.individual$GC1, features =km , label = T) + FeaturePlot(sobj.individual$GC2, features =km , label=T))
+}
+dev.off()
+
+pdf("./plots/individual/common_markers.pdf")
+ggplot(merged.markers[!is.na(merged.markers$cluster.GC1),])+ geom_bar(aes(x=cluster.GC1, fill=cluster.GC2))
+ggplot(merged.markers[!is.na(merged.markers$cluster.GC2),])+ geom_bar(aes(x=cluster.GC2, fill=cluster.GC1))
+FeaturePlot(sobj.individual$GC1, features = top.markers$GC1$gene )
+FeaturePlot(sobj.individual$GC2, features = top.markers$GC1$gene )
+FeaturePlot(sobj.individual$GC1, features = top.markers$GC2$gene )
+FeaturePlot(sobj.individual$GC2, features = top.markers$GC2$gene )
+dev.off()
+
+
+```
+
+
+## Data integration
+Integrate the two datasets
+```{r integration}
+sobj.anchors <- FindIntegrationAnchors(object.list = sobj, dims = 1:20)
+sobj.combined <- IntegrateData(anchorset = sobj.anchors, dims = 1:20)
+DefaultAssay(sobj.combined) <- "integrated"
+```
+
+## Scaling and PCA
+```{r}
+
+sobj.combined <- ScaleData(sobj.combined, verbose = FALSE, vars.to.regress = "orig.ident")
+sobj.combined <- RunPCA(sobj.combined, npcs = 30, verbose = FALSE)
+
+print(sobj.combined[["pca"]], dims = 1:5, nfeatures = 5)
+DimHeatmap(sobj.combined, dims = 1:15, cells = 500, balanced = TRUE)
+### Identify the number of significant components
+sobj.combined <- JackStraw(sobj.combined, num.replicate = 100, dims =30)
+sobj.combined <- ScoreJackStraw(sobj.combined, dims = 1:30)
+JackStrawPlot(sobj.combined, dims = 1:30)
+ElbowPlot(sobj.combined, ndims = 30)
+pdf("./plots/JackStrawPlot.pdf")
+JackStrawPlot(sobj.combined, dims = 1:30)
+ElbowPlot(sobj.combined, ndims = 30)
+dev.off()
+
+pct <- sobj.combined[["pca"]]@stdev / sum(sobj.combined[["pca"]]@stdev) * 100
+# Calculate cumulative percents for each PC
+cumu <- cumsum(pct)
+# Determine which PC exhibits cumulative percent greater than 90% and % variation associated with the PC as less than 5
+co1 <- which(cumu > 90 & pct < 5)[1]
+co1
+# Determine the difference between variation of PC and subsequent PC
+co2 <- sort(which((pct[1:length(pct) - 1] - pct[2:length(pct)]) > 0.1), decreasing = T)[1] + 1
+# last point where change of % of variation is more than 0.1%.
+co2
+# Minimum of the two calculation
+n_dim <- min(co1, co2)
+
+# Create a dataframe with values
+plot_df <- data.frame(pct = pct,
+                      cumu = cumu,
+                      rank = 1:length(pct))
+# Elbow plot to visualize
+pdf("./plots/cumulativePCA.pdf")
+ggplot(plot_df, aes(cumu, pct, label = rank, color = rank > pcs)) +
+  geom_text() +
+  geom_vline(xintercept = 90, color = "grey") +
+  geom_hline(yintercept = min(pct[pct > 5]), color = "grey") +
+  theme_bw()
+dev.off()
+
+```
+
+## UMAP and clustering
+
+```{r tsne_clustering}
+sobj.combined <- RunUMAP(sobj.combined, reduction = "pca", dims = 1:n_dim)
+sobj.combined <- FindNeighbors(sobj.combined, reduction = "pca", dims = 1:n_dim)
+sobj.combined <- FindClusters(sobj.combined, resolution = 0.5)
+
+p1 <- DimPlot(sobj.combined, reduction = "umap", group.by = "orig.ident", label=F)
+p2 <- DimPlot(sobj.combined, reduction = "umap", label = TRUE)
+p3 <- DimPlot(sobj.combined, reduction = "umap", split.by = "orig.ident")
+pdf("./plots/UMAP.pdf")
+print(p1)
+print(p2)
+print(p3)
+dev.off()
+
+
+```
+
+
+## Cluster Biomarkers
+
+Expected 4 main clusters:
+DZ, LZ, PBL, or PreM
+DZ = dark zone, high proliferation
+LZ = light zone, affinity selection
+PBL = plasmablast
+PreM = Pre Memory cell
+
+```{r cluster_biomarker}
+sobj.markers <- FindAllMarkers(sobj.combined, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+
+sobj.markers %>%
+    group_by(cluster) %>%
+    top_n(n = 10, wt = avg_log2FC) -> top10
+pdf("./plots/DotHeatMapTop10.pdf")
+DoHeatmap(sobj.combined, features = top10$gene) + NoLegend()
+dev.off()
+
+h_gene_sets = msigdbr(species = "Homo sapiens", category = "H")
+h_gene_sets$gene_symbol
+H <- list()
+for(i in 1:length(table(h_gene_sets$gs_name))){
+  current = names(table(h_gene_sets$gs_name))[i]
+  H[[i]] = h_gene_sets[which(h_gene_sets$gs_name==current),]$gene_symbol
+}
+names(H) = names(table(h_gene_sets$gs_name))
+library(RColorBrewer)
+
+pdf("./plots/known_markers.pdf")
+for ( km in names(known_markers)){
+  sobj.combined = AddModuleScore( sobj.combined, features = list(known_markers[[km]]), assay = "RNA", name = km, seed = 1, search = FALSE)
+  f.plot = FeaturePlot(object = sobj.combined,features =paste0(km, "1"),  keep.scale = "all", pt.size = 0.5,
+                     cols = rev(brewer.pal(n = 11, name = "RdBu")), order = T, label = T, label.size = 8) + theme(legend.position = "right") 
+  print(f.plot)
+  
+  
+  v.plot = VlnPlot(sobj.combined, features = paste0(km, "1"),  pt.size = 0.5)
+  print(v.plot)
+  v.plot = VlnPlot(sobj.combined, features = paste0(km, "1"),  pt.size = 0.5,split.by = "orig.ident")
+  print(v.plot)
+}
+dev.off()
+
+
+
+```
+
+## Little test for the data generated with Nextflow
+
+```{r preprocessed_data}
+cdata = list( GC1 = Read10X("./results/cellranger/count/GC1/outs/filtered_feature_bc_matrix/"), 
+              GC2 = Read10X("./results/cellranger/count/GC2/outs/filtered_feature_bc_matrix/"))
+
+csobj = list(GC1 = CreateSeuratObject(cdata$GC1 , project = "GC1", min.cells = 3, min.features = 1),
+             GC2 = CreateSeuratObject(cdata$GC2 , project = "GC2", min.cells = 3, min.features = 1))
+mdata = NULL
+for ( exp in names(csobj) ){
+  csobj[[exp]][["percent.mt"]] <- PercentageFeatureSet(csobj[[exp]], pattern = "^MT-")
+  mdata = rbind(mdata,csobj[[exp]]@meta.data)
+}
+
+p1= ggplot(mdata, aes(x=orig.ident, y=nFeature_RNA)) + geom_violin(aes(fill=orig.ident)) + 
+  geom_point(aes(x=orig.ident, y= nFeature_RNA), position = position_jitter(width = 0.3, height = 0), size=0.2) + ggtitle("Number of unique features") + theme_bw() 
+p1_thr= p1+ geom_hline(yintercept = 200, color="red") + geom_hline(yintercept = 2500, color="red")
+p1_thr
+p2= ggplot(mdata, aes(x=orig.ident, y=nCount_RNA)) + geom_violin(aes( fill=orig.ident)) + 
+  geom_point( position = position_jitter(width = 0.3, height = 0), size=0.2) + 
+   ggtitle("Total count") + theme_bw()
+p2
+p3= ggplot(mdata, aes(x=orig.ident, y=percent.mt)) + geom_violin(aes( fill=orig.ident)) + 
+  geom_point( position = position_jitter(width = 0.3, height = 0), size=0.2) + geom_hline(yintercept = 5, color="red")+
+   ggtitle("Percentage of mitocondrial counts") + theme_bw()
+p3
+
+p4 =  ggplot(mdata, aes(x=nCount_RNA, y=nFeature_RNA)) + geom_point(aes( color=orig.ident), size=0.2)+
+   ggtitle(paste0("Pearson Correlation: \nGC1: ", round(cor(mdata$nCount_RNA[mdata$orig.ident == "GC1"],mdata$nFeature_RNA[mdata$orig.ident == "GC1"],  method="pearson") , 3), 
+                  "\nGC2: ",  round(cor(mdata$nCount_RNA[mdata$orig.ident == "GC2"],mdata$nFeature_RNA[mdata$orig.ident == "GC2"],  method="pearson") , 3) )) +
+  theme_bw() + facet_grid(cols = vars(orig.ident))
+p4
+p5 =  ggplot(mdata, aes(x=nCount_RNA, y=percent.mt)) + geom_point(aes( color=orig.ident), size=0.2)+
+   ggtitle(paste0("Pearson Correlation: \nGC1: ", round(cor(mdata$nCount_RNA[mdata$orig.ident == "GC1"],mdata$percent.mt[mdata$orig.ident == "GC1"],  method="pearson") , 3), 
+                  "\nGC2: ",  round(cor(mdata$nCount_RNA[mdata$orig.ident == "GC2"],mdata$percent.mt[mdata$orig.ident == "GC2"],  method="pearson") , 3) )) +
+  theme_bw() + facet_grid(cols = vars(orig.ident))
+p5
+
+pdf("./plots/QC_reprocess.pdf")
+print(p1_thr)
+print(p2)
+print(p3)
+print(p4)
+print(p5)
+dev.off()
+```
+
+
+## Session Info
+
+```{r sessionInfo}
+sessionInfo()
+```

@@ -1,0 +1,12 @@
+CELLRANGER_COUNT:
+  cellranger: '7.1.0 '
+CUSTOM_DUMPSOFTWAREVERSIONS:
+  python: 3.11.0
+  yaml: '6.0'
+FASTQC:
+  fastqc: 0.11.9
+SAMPLESHEET_CHECK:
+  python: 3.8.3
+Workflow:
+  Nextflow: 23.04.4
+  nf-core/scrnaseq: 2.4.0

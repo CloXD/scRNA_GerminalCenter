@@ -1,0 +1,3 @@
+sample,single_end,fastq_1,fastq_2,expected_cells,seq_center
+GC1,0,/home/claudio/git/scRNA_DLBCL/raw/GC1_R1.fastq.gz,/home/claudio/git/scRNA_DLBCL/raw/GC1_R2.fastq.gz,4500,
+GC2,0,/home/claudio/git/scRNA_DLBCL/raw/GC2_R1.fastq.gz,/home/claudio/git/scRNA_DLBCL/raw/GC2_R2.fastq.gz,4500,

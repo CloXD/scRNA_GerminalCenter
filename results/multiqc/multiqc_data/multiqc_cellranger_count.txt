@@ -1,0 +1,3 @@
+Sample	estimated cells	reads in cells	avg reads/cell	reads	valid bc	Q30 bc	Q30 read	Q30 UMI	valid umi	saturation	median umi/cell	median genes/cell	genes detected	reads mapped	confident reads	confident intergenic	confident intronic	confident exonic	confident transcriptome	reads antisense
+GC1	5639.0	96.3	72483.0	408730285.0	97.7	98.6	83.9	98.6	100.0	86.3	5356.0	2215.0	26715.0	95.2	92.7	3.4	25.9	63.4	76.7	12.0
+GC2	4112.0	94.7	82622.0	339739927.0	97.4	93.4	90.2	93.0	100.0	84.2	6392.0	2426.0	26194.0	94.0	91.7	2.9	18.8	70.1	80.0	8.3

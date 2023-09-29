@@ -1,0 +1,7 @@
+Module	Section	Sample Name	Source
+cellranger	count	GC2	/home/claudio/git/scRNA_DLBCL/work/8a/8c0d9965ef3828c9b4251963ab7f47/8/web_summary.html
+cellranger	count	GC1	/home/claudio/git/scRNA_DLBCL/work/8a/8c0d9965ef3828c9b4251963ab7f47/7/web_summary.html
+FastQC	all_sections	GC2_1	/home/claudio/git/scRNA_DLBCL/work/8a/8c0d9965ef3828c9b4251963ab7f47/5/GC2_1_fastqc.zip
+FastQC	all_sections	GC1_2	/home/claudio/git/scRNA_DLBCL/work/8a/8c0d9965ef3828c9b4251963ab7f47/4/GC1_2_fastqc.zip
+FastQC	all_sections	GC1_1	/home/claudio/git/scRNA_DLBCL/work/8a/8c0d9965ef3828c9b4251963ab7f47/3/GC1_1_fastqc.zip
+FastQC	all_sections	GC2_2	/home/claudio/git/scRNA_DLBCL/work/8a/8c0d9965ef3828c9b4251963ab7f47/6/GC2_2_fastqc.zip
